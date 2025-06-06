@@ -1,0 +1,4 @@
+{
+    "command": "npm run dev -- --port <port>",
+    "working_directory": "/home/kavia/workspace/code-generation/chesstictactoe-4325-21b0732e/chess_tic_tac_toe"
+}
