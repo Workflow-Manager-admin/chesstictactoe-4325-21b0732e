@@ -23,6 +23,9 @@
       <span v-else-if="isDraw">
         <span class="cttt-draw-label">It's a draw!</span>
       </span>
+      <span v-if="autoRestartCountdown !== null && (winner || isDraw)" class="cttt-auto-restart">
+        Restarting in {{ autoRestartCountdown }}...
+      </span>
     </div>
     <div class="cttt-board">
       <div
@@ -49,7 +52,7 @@
 </template>
 
 <script lang="ts">
-import { ref } from 'vue'
+import { ref, watch, onBeforeUnmount } from 'vue'
 
 const BOARD_SIZE = 9
 const lines = [
@@ -75,6 +78,8 @@ export default {
     const winner = ref<null | 'queen' | 'king'>(null)
     const isDraw = ref(false)
     const winningLine = ref<number[]>([])
+    const autoRestartCountdown = ref<null | number>(null)
+    let intervalId: ReturnType<typeof setInterval> | null = null
 
     // PUBLIC_INTERFACE
     function onCellClick(idx: number): void {
@@ -99,6 +104,11 @@ export default {
       winner.value = null
       isDraw.value = false
       winningLine.value = []
+      autoRestartCountdown.value = null
+      if (intervalId) {
+        clearInterval(intervalId)
+        intervalId = null
+      }
     }
 
     // PUBLIC_INTERFACE
@@ -124,12 +134,46 @@ export default {
       return null
     }
 
+    // Watch for game end (win or draw)
+    watch(
+      () => [winner.value, isDraw.value],
+      ([newWinner, newIsDraw], [oldWinner, oldIsDraw]) => {
+        // Only trigger when game status changes to ended
+        if ((newWinner || newIsDraw) && (!oldWinner && !oldIsDraw)) {
+          let countdown = 5
+          autoRestartCountdown.value = countdown
+          intervalId = setInterval(() => {
+            countdown--
+            autoRestartCountdown.value = countdown
+            if (countdown === 0) {
+              restartGame()
+            }
+          }, 1000)
+        }
+        // If game resets or restarts, clean up any interval/timer
+        if ((!newWinner && !newIsDraw) && (oldWinner || oldIsDraw)) {
+          if (intervalId) {
+            clearInterval(intervalId)
+            intervalId = null
+          }
+          autoRestartCountdown.value = null
+        }
+      }
+    )
+
+    onBeforeUnmount(() => {
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    })
+
     return {
       board,
       currentPlayer,
       winner,
       isDraw,
       winningLine,
+      autoRestartCountdown,
       onCellClick,
       restartGame,
       getCellClass,
@@ -160,6 +204,10 @@ export default {
   margin-bottom: 1.3rem;
   min-height: 2em;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .cttt-player-label {
@@ -173,6 +221,15 @@ export default {
   color: #bfa14a;
   font-weight: bold;
   font-size: 1.1em;
+}
+
+.cttt-auto-restart {
+  display: block;
+  font-size: 1em;
+  color: #fff0b0;
+  margin-top: 8px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
 }
 
 .cttt-board {
@@ -193,7 +250,6 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 2.6em;
   cursor: pointer;
   background: #f5f5dc;
   color: #2e2e2e;
@@ -201,8 +257,28 @@ export default {
   border: 2.5px solid #bfa14a;
   transition: background 0.18s, box-shadow 0.18s;
   position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
+/* For responsive design: shrink cells on small screens */
+@media (max-width: 500px) {
+  .cttt-board {
+    grid-template-columns: repeat(3, 15vw);
+    grid-template-rows: repeat(3, 15vw);
+    padding: 0.5em;
+  }
+  .cttt-cell {
+    width: 15vw;
+    height: 15vw;
+    min-width: 45px;
+    min-height: 45px;
+    max-width: 80px;
+    max-height: 80px;
+  }
+}
+
+/* Highlight for winning cells stays the same */
 .cttt-cell.cttt-winning {
   background: #bfa14a;
   color: #2e2e2e;
@@ -210,6 +286,7 @@ export default {
   border-color: #fff0b0;
   z-index: 2;
 }
+
 .cttt-cell.cttt-empty:hover {
   background: #bfa14a75;
   color: #232323;
@@ -218,12 +295,26 @@ export default {
 }
 
 .cttt-cell .cttt-piece {
-  font-size: 2.15em;
+  /* Fix icon overflow on all screens */
+  font-size: 2.4em;
   font-weight: bold;
   user-select: none;
   transition: transform 0.18s;
   line-height: 1;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* For really small cells, scale down icons */
+@media (max-width: 500px) {
+  .cttt-cell .cttt-piece {
+    font-size: 2em;
+  }
 }
 
 .cttt-piece.queen {
